@@ -1,0 +1,8 @@
+Document: libopencsd
+Title: libOpenCSD Manual
+Abstract: This manual describes libopencsd, usage and classes
+Section: System/Monitoring
+
+Format: HTML
+Index: /usr/share/doc/libopencsd-dev/html/index.html
+Files: /usr/share/doc/libopencsd-dev/html/*.html

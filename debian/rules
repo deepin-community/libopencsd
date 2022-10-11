@@ -1,0 +1,60 @@
+#!/usr/bin/make -f
+# See debhelper(7) (uncomment to enable)
+# output every command that modifies files on the build system.
+export DH_VERBOSE = 1
+
+DPKG_EXPORT_BUILDFLAGS = 1
+include /usr/share/dpkg/default.mk
+include /usr/share/dpkg/architecture.mk
+
+PREFIX=/usr
+LIB_PATH=lib/$(DEB_HOST_MULTIARCH)
+PKG_VERSION=$(shell dpkg-parsechangelog -S version | cut -d- -f1)
+export CROSS_COMPILE=$(DEB_HOST_GNU_TYPE)-
+
+ifneq (,$(filter noopt,$(DEB_BUILD_OPTIONS)))
+   OPTS="DEBUG=1"
+endif
+
+# see ENVIRONMENT in dpkg-buildflags(1)
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
+export DEB_BUILD_MAINT_OPTIONS += hardening=+all
+
+%:
+	dh $@
+
+
+override_dh_auto_build-arch:
+	make -f decoder/build/linux/makefile $(OPTS) LIB_PATH=$(LIB_PATH)
+#always build tests as one util is useful
+#await mechanism for running build-time tests.
+#ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+#	make -f decoder/build/linux/makefile tests $(OPT_PATH=$(LIB_PATH)
+#endif
+	sed -r -e 's/^(Version: ).*$$/\1$(PKG_VERSION)/' debian/libopencsd.pc.in > debian/libopencsd.pc
+	sed -i -e 's:@PREFIX@:$(PREFIX):' debian/libopencsd.pc
+	sed -i -e 's:@LIB_PATH@:$(LIB_PATH):' debian/libopencsd.pc
+
+override_dh_auto_build-indep:
+ifeq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
+	make -f decoder/build/linux/makefile docs
+endif
+
+override_dh_installdocs:
+	# kick compat 11+ to put docs where we told it
+	dh_installdocs -X.md5 -X.map
+	jdupes -rl debian/libopencsd-doc/usr/share/doc/
+
+override_dh_compress:
+	dh_compress -X.pdf
+
+override_dh_auto_install-arch:
+	make -f decoder/build/linux/makefile install PREFIX=$(CURDIR)/debian/tmp/usr $(OPTS) LIB_PATH=$(LIB_PATH)
+	mkdir -p debian/tmp/usr/$(LIB_PATH)/pkgconfig/
+	cp debian/libopencsd.pc debian/tmp/usr/$(LIB_PATH)/pkgconfig/
+
+override_dh_clean:
+	make -f decoder/build/linux/makefile clean $(OPTS) LIB_PATH=$(LIB_PATH)
+	-rm -r decoder/lib decoder/tests/bin
+	-rm debian/libopencsd.pc
+	dh_clean

@@ -1,0 +1,5 @@
+HOWTO.md
+README.md
+decoder/docs/*.md
+decoder/docs/specs/
+decoder/docs/html

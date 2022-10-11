@@ -1,0 +1,64 @@
+Source: libopencsd
+Priority: optional
+Maintainer: Wookey <wookey@debian.org>
+Build-Depends: debhelper-compat (= 12), doxygen, graphviz, jdupes
+Standards-Version: 4.5.0
+Section: libs
+Homepage: https://github.com/Linaro/OpenCSD
+Rules-Requires-Root: no
+Vcs-Browser: https://salsa.debian.org/wookey/libopencsd
+Vcs-Git: https://salsa.debian.org/wookey/libopencsd.git
+
+Package: libopencsd-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libopencsd1 (= ${binary:Version}), ${misc:Depends}
+Description: ARM CoreSight trace decode library development files
+ This library provides an API suitable for the decode of ARM(r) CoreSight(tm)
+ trace streams. It supports ETMv3 data & instruction trace, ETMv4 instruction
+ trace, PTM (v1.1) instruction trace, STM (v1.1) software trace, and support for
+ external/custom decoders.
+ .
+ This is the development package containing the headers and static library build
+
+Package: libopencsd1
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: ARM CoreSight Trace decode library
+ This library provides an API suitable for the decode of ARM(r) CoreSight(tm)
+ trace streams. It supports ETMv3 data & instruction trace, ETMv4 instruction
+ trace, PTM (v1.1) instruction trace, STM (v1.1) software trace, and support for
+ external/custom decoders.
+ .
+ This library is trypically used via perf, but libopencsd-bin also contains a
+ test binary.
+
+Package: libopencsd-bin
+Section: libdevel
+Architecture: any
+Multi-Arch: foreign
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: ARM CoreSight trace decode utility
+ Tool to decode ARM Coresight trace stream packets.
+ .
+ The CoreSight library provides an API suitable for the decode of ARM(r)
+ CoreSight(tm) trace streams. It supports ETMv3 data & instruction trace,
+ ETMv4 instruction trace, PTM (v1.1) instruction trace, STM (v1.1) software
+ trace, and support for external/custom decoders.
+ .
+ This is the tools package containing useful binaries.
+
+Package: libopencsd-doc
+Section: doc
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends}
+Description: ARM CoreSight trace decode library documentation
+ This library provides an API suitable for the decode of ARM(r) CoreSight(tm)
+ trace streams. It supports ETMv3 data & instruction trace, ETMv4 instruction
+ trace, PTM (v1.1) instruction trace, STM (v1.1) software trace, and support for
+ external/custom decoders.
+ .
+ This is the documentation package.
