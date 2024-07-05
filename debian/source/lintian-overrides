@@ -1,0 +1,7 @@
+# We can accept there being no source for a test binary
+libopencsd source: source-is-missing
+# these test binaries are deliberately odd and annoy readelf
+libopencsd source: binary-with-bad-dynamic-table
+libopencsd source: elf-error
+
+#I can't get the file-specific context qualifier to work here so just the general whinges are listed 

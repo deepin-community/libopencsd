@@ -53,23 +53,31 @@ BIN_DIR=./bin/linux64/rel/
 # directories for tests using full decode
 declare -a test_dirs_decode=( "001-ack_test"
                               "002-ack_test_scr"
+                              "ete-bc-instr"
                               "ete_ip"
+                              "ete-ite-instr"
                               "ete_mem"
                               "ete_spec_1"
                               "ete_spec_2"
                               "ete_spec_3"
+                              "ete_wfet"
                               "event_test"
                               "infrastructure"
+                              "pauth_lr"
+                              "pauth_lr_Rm"
                               "q_elem"
+                              "rme_test"
+                              "s_9001"
                               "src_addr"
+                              "ss_ib_el1ns"
                               "tme_simple"
                               "tme_tcancel"
                               "tme_test"
                               "trace_file_cid_vmid"
                               "trace_file_vmid"
+                              "ts_bit64_set"
                               "ts_marker"
                             )
-
 
 # directories for tests using I_SRC_ADDR_range option
 declare -a test_dirs_decode_src_addr_opt=( "002-ack_test_scr"
@@ -77,6 +85,15 @@ declare -a test_dirs_decode_src_addr_opt=( "002-ack_test_scr"
                               "src_addr"
                               )
 
+# directories with multi session snapshots
+declare -a test_dirs_decode_multi_sess=( "ss_ib_el1ns"
+                                         "ete-ite-instr"
+                                         "pauth_lr"
+                                         "pauth_lr_Rm"                                        
+                                         "q_elem"
+                                         "rme_test"
+                                         "s_9001"
+                                        )                                            
 
 echo "Running trc_pkt_lister on snapshot directories."
 
@@ -84,8 +101,11 @@ mkdir -p ${OUT_DIR}
 
 if [ "$1" == "use-installed" ]; then
     BIN_DIR=""
-elif [ "$1" != "" ]; then
-    BIN_DIR=$1
+    shift
+elif [ "$1" == "-bindir" ]; then
+    BIN_DIR=$2
+    shift
+    shift
 fi
 
 echo "Tests using BIN_DIR = ${BIN_DIR}"
@@ -99,13 +119,20 @@ fi
 for test_dir in "${test_dirs_decode[@]}"
 do
     echo "Testing $test_dir..."
-    ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/$test_dir" -decode -logfilename "${OUT_DIR}/$test_dir.ppl"
+    ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/$test_dir" $@ -decode -logfilename "${OUT_DIR}/$test_dir.ppl"
     echo "Done : Return $?"
 done
 
 for test_dir_n in "${test_dirs_decode_src_addr_opt[@]}"
 do
     echo "Testing with -src_addr_n  $test_dir_n..."
-    ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/$test_dir_n" -decode -src_addr_n -logfilename "${OUT_DIR}/${test_dir_n}_src_addr_N.ppl"
+    ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/$test_dir_n" $@ -decode -src_addr_n -logfilename "${OUT_DIR}/${test_dir_n}_src_addr_N.ppl"
+    echo "Done : Return $?"
+done
+
+for test_dir_ms in "${test_dirs_decode_multi_sess[@]}"
+do
+    echo "Testing with -multi_session  $test_dir_ms..."
+    ${BIN_DIR}trc_pkt_lister -ss_dir "${SNAPSHOT_DIR}/$test_dir_ms" $@ -decode -multi_session -logfilename "${OUT_DIR}/${test_dir_ms}_multi_sess.ppl"
     echo "Done : Return $?"
 done

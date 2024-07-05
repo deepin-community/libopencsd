@@ -27,11 +27,11 @@ Releases will appear on the master branch in the git repository with an appropri
 CoreSight Trace Component Support.
 ----------------------------------
 
-_Current Version 1.1.1_
+_Current Version 1.5.2_
 
 ### Current support:
 
-- ETE   (v1.1) instruction trace - packet processing and packet decode.
+- ETE   (v1.3) instruction trace - packet processing and packet decode.
 - ETMv4 (v4.6 [A/R profile] v4.4 [M profile]) instruction trace - packet processing and packet decode.
 - PTM   (v1.1) instruction trace - packet processing and packet decode.
 - ETMv3 (v3.5) instruction trace - packet processing and packet decode.
@@ -249,6 +249,82 @@ Version and Modification Information
 
 - _Version 1.1.1_:
     - __Bugfix__: Fix include and install for ETE decoder headers.
+
+- _Version 1.2.0_:
+    - __Update__: Add API for counting packet decode statistics, and Frame debmux statistics.
+    - __Update__: Update test scripts to allow additional command line options to be passed.
+    - __Bugfix__: Fix various build warnings.
+    - __Bugfix__: Remove unused variable (github issue #38 from Yi Kong)
+    - __Bugfix__: Remove noisy printf (James Clark)
+    - __Bugfix__: Fix documentation issues (github issues #39 & #40 from rbresalier)
+
+- _Version 1.2.1_:
+   - __Bugfix__: ETM4x / ETE - output of context elements to client can in some circumstances
+                 be delayed until after subsequent atoms have been processed leading to incorrect
+                 memory decode access via the client callbacks.
+                 Fixed to flush context elements immediately they are committed.
+
+- _Version 1.3.0_:
+    - __Admin__: Dev versions now have patch versions at least +100 from root public version
+    - __Update__: Add support for conditional branch (BC.cond) introduced for v8.8 / v9.3 architecture.
+    - __Update__: ETE: Add support for NSE bit - security state bit defining Root / Realm states in FEAT_RME.
+
+- _Version 1.3.1_:
+    - __Bugfix__: Add header file in snapshot parser - fix build for certain libc++ libs (github issue #43 from manojgupta)
+    - __Bugfix__: Fix typo in comment (github issue #42 from nothatDinger)
+
+- _Version 1.3.2_:
+    - __Bugfix__: ETM4x / ETE - 64 bit timestamp value - MS bit incorrectly masked to 1b0 during extraction from packet.
+
+- _Version 1.3.3_:
+    - __Update__: Add build directory for VS2022 build.
+    - __Update__: Add test program for Coresight Frame Demux code
+    - __Bugfix__: PTM: Fix incorrect extraction of Waypoint Address packet (github issue #48)
+    - __Bugfix__: Frame Demux: Fix HSYNC, FSYNC and 4xFSYNC handling that was causing out-of-bounds reads
+                  on invalid data input. (issues #49, #50 and #51). Fixed error handling for incorrect 
+                  number of FSYNC packets in 4xFSYNC frame reset code that was not triggering an error
+                  and allowing fun with mis-aligned input data.
+    - __Bugfix__: Fix silent failure if incorrect config flags set when setting up frame demux modes.
+
+- _Version 1.4.0_:
+    - __Update__: ETE: Add support for Arch v9.4 FEAT_ITE. ETE v1p3, sw trace instrumentation.
+                  Adds in new generic output packet type: OCSD_GEN_TRC_ELEM_INSTRUMENTATION.
+    - __Bugfix__: Fix memory leak in mispredict handling (github issue #52 from yabinc)
+
+- _Version 1.4.1_:
+    - __Update__: Test: Update test program trc_pkt_lister with option to have no logging output - final stats only.
+    - __Bugfix__: ETM4x: ETE: Fix memory leak / use after free (github issues #53, #58 from yabinc)
+    - __Bugfix__: C-API: Fix memory leak with output sink object. (github issue #55)
+
+- _Version 1.4.2_:
+    - __Update__: Decoder memory access - add debug features and cacheing to improve performance of decode.
+                  Caching controllable by API or environment variables.
+    - __Update__: Decode debug options to control potential runaway debug when incorrect memory images input
+                  to decoder.
+                  
+                   - aarch64 instruction check for invalid instruction opcode. (any opcode with 0x0000 as top
+                      16 bits).
+                      
+                   - optional instruction range maximum run limit. Set by environment variable.
+                   
+    - __Update__: Remove VS2015 support.
+    - __Bugfix__: Memory spaces: ensure that decoder memory requests are correctly labelled with Realm and
+                  root characteristics when appropriate.
+    - __Bugfix__: M class tail chained interrupts now correctly handled.    
+    - __Bugfix__: STM: - fix master and channel ID initialisation (github issue #61 from MommeSherif)
+    - __Bugfix__: Test: update HOWTO.md and perf-test-script.base for new paths (github issue #60 from yuxy-c)
+    - __Bugfix__: build: Fix GCC version dir handling for versions of GCC > 9.
+
+
+- _Version 1.5.1_:
+    - __Update__: ETE: Add support for Arch 9.5 FEAT_PAUTH_LR. Add new instructions to disassembler to 
+                  recognise RETA<k>SPPC variants as indirect branches. Adds new test snapshots.
+
+- _Version 1.5.2_:
+    - __Update__: docs: Update documentation for test programs.
+    - __Update__: docs: Update trc_pkt_lister man file.
+    - __Bugfix__: build: fix warnings building library.
+    - __Bugfix__: tests: Fix typo in trc_pkt_lister help output.
 
 Licence Information
 ===================
