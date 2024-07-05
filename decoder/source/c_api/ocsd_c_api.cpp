@@ -234,14 +234,38 @@ OCSD_C_API ocsd_err_t ocsd_dt_attach_packet_callback(  const dcd_tree_handle_t h
     return err;
 }
 
-/*** Decode tree set element output */
+OCSD_C_API ocsd_err_t ocsd_dt_get_decode_stats(const dcd_tree_handle_t handle,
+                                               const unsigned char CSID,                                               
+                                               ocsd_decode_stats_t **p_stats_block)
+{
+    DecodeTree *pDT = static_cast<DecodeTree *>(handle);
+    
+    return pDT->getDecoderStats(CSID, p_stats_block);
+}
 
+OCSD_C_API ocsd_err_t ocsd_dt_reset_decode_stats(const dcd_tree_handle_t handle,
+                                                 const unsigned char CSID)
+{
+    DecodeTree *pDT = static_cast<DecodeTree *>(handle);
+
+    return pDT->resetDecoderStats(CSID);
+}
+
+/*** Decode tree set element output */
 OCSD_C_API ocsd_err_t ocsd_dt_set_gen_elem_outfn(const dcd_tree_handle_t handle, FnTraceElemIn pFn, const void *p_context)
 {
 
     GenTraceElemCBObj * pCBObj = new (std::nothrow)GenTraceElemCBObj(pFn, p_context);
+    ITrcGenElemIn* pCurrIF;
+
     if(pCBObj)
     {
+        /* delete any previous element we might have set */
+        pCurrIF = ((DecodeTree*)handle)->getGenTraceElemOutI();
+        if (pCurrIF)
+            delete static_cast<GenTraceElemCBObj*>(pCurrIF);
+
+        /* set the new one */
         ((DecodeTree *)handle)->setGenTraceElemOutI(pCBObj);
         return OCSD_OK;
     }

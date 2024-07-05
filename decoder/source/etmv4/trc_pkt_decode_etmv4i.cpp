@@ -241,6 +241,20 @@ void TrcPktDecodeEtmV4I::initDecoder()
     m_CSID = 0;
     m_IASize64 = false;
 
+    // set debug range limit - look for debugging env var
+    char* env_var;
+    long env_val;
+
+    m_num_instr_range_limit = 0;
+    if ((env_var = getenv(OCSD_ENV_INSTR_RANGE_LIMIT)) != NULL)
+    {
+        env_val = strtol(env_var, NULL, 0);
+        /* if valid number set limit */
+        if (env_val > 0)
+            m_num_instr_range_limit = env_val;
+
+    }
+
     // elements associated with data trace
 #ifdef DATA_TRACE_SUPPORTED
     m_p0_key_max = 0;
@@ -564,12 +578,19 @@ ocsd_err_t TrcPktDecodeEtmV4I::decodePacket()
         }
         break;
 
-    /*** presently unsupported packets ***/
-    /* ETE commit window - not supported in current ETE versions - blocked by packet processor */
-    case ETE_PKT_I_COMMIT_WIN_MV:
-        err = OCSD_ERR_UNSUPP_DECODE_PKT;
-        err = handlePacketSeqErr(err, m_index_curr_pkt, "ETE Commit Window Move, unsupported packet type.");
+        /* PE Instrumentation packet */
+    case ETE_PKT_I_ITE:
+        {
+            trace_sw_ite_t ite_pkt;
+
+            ite_pkt.el = m_curr_packet_in->getITE_EL();
+            ite_pkt.value = m_curr_packet_in->getITE_value();
+            if (m_P0_stack.createITEElem(m_curr_packet_in->getType(), m_index_curr_pkt, ite_pkt) == 0)
+                bAllocErr = true;
+        }
         break;
+
+    /*** presently unsupported packets ***/
         /* conditional instruction tracing */
     case ETM4_PKT_I_COND_FLUSH:
     case ETM4_PKT_I_COND_I_F1:
@@ -664,14 +685,18 @@ ocsd_datapath_resp_t TrcPktDecodeEtmV4I::resolveElements()
             if (m_elem_res.P0_commit)
                 err = commitElements();
 
-            if (!err && m_elem_res.P0_cancel)
-                err = cancelElements();
+            // allow for early flush on context element 
+            if (!m_elem_res.P0_commit) {
 
-            if (!err && m_elem_res.mispredict)
-                err = mispredictAtom();
-            
-            if (!err && m_elem_res.discard)
-                err = discardElements();
+                if (!err && m_elem_res.P0_cancel)
+                    err = cancelElements();
+
+                if (!err && m_elem_res.mispredict)
+                    err = mispredictAtom();
+
+                if (!err && m_elem_res.discard)
+                    err = discardElements();
+            }
 
             if (err != OCSD_OK)
                 resp = OCSD_RESP_FATAL_INVALID_DATA;
@@ -706,10 +731,11 @@ ocsd_err_t TrcPktDecodeEtmV4I::commitElements()
     int num_commit_req = m_elem_res.P0_commit;
     ocsd_trc_index_t err_idx = 0;
     TrcStackElem *pElem = 0;    // stacked element pointer
+    bool contextFlush = false;
 
     err = m_out_elem.resetElemStack();
 
-    while(m_elem_res.P0_commit && !err)
+    while(m_elem_res.P0_commit && !err && !contextFlush)
     {
         if (m_P0_stack.size() > 0)
         {
@@ -751,8 +777,17 @@ ocsd_err_t TrcPktDecodeEtmV4I::commitElements()
                     if(ctxt.updated)
                     {                        
                         err = m_out_elem.addElem(pElem->getRootIndex());
-                        if (!err)
+                        if (!err) {
                             updateContext(pCtxtElem, outElem());
+
+                            // updated context - need to force this to be output to the client so correct memory 
+                            // context can be used.
+                            contextFlush = true;
+                            
+                            // invalidate memory accessor cacheing - force next memory access out to client to 
+                            // ensure that the correct memory context is in play when decoding subsequent atoms.
+                            invalidateMemAccCache();
+                        }
                     }
                 }
                 }
@@ -839,6 +874,10 @@ ocsd_err_t TrcPktDecodeEtmV4I::commitElements()
             case P0_TRANS_FAIL:
             case P0_TRANS_TRACE_INIT:
                 err = processTransElem(pElem);
+                break;
+
+            case P0_ITE:
+                err = processITEElem(pElem);
                 break;
             }
 
@@ -943,6 +982,10 @@ ocsd_err_t TrcPktDecodeEtmV4I::commitElemOnEOT()
         case P0_MARKER:
             err = processMarkerElem(pElem);
             break;
+
+        case P0_ITE:
+            err = processITEElem(pElem);
+            break;
         }
         m_P0_stack.delete_back();
     }
@@ -999,6 +1042,7 @@ ocsd_err_t TrcPktDecodeEtmV4I::cancelElements()
                     case P0_CC:
                     case P0_TS_CC:
                     case P0_MARKER:
+                    case P0_ITE:
                         m_P0_stack.pop_front(false);
                         temp.push_back(pElem);
                         break;
@@ -1100,6 +1144,8 @@ ocsd_err_t TrcPktDecodeEtmV4I::discardElements()
         pElem = m_P0_stack.back();
         if (pElem->getP0Type() == P0_MARKER)
             err = processMarkerElem(pElem);
+        else if (pElem->getP0Type() == P0_MARKER)
+            err = processITEElem(pElem);
         else
             err = processTS_CC_EventElem(pElem);
         m_P0_stack.delete_back();
@@ -1188,6 +1234,18 @@ ocsd_err_t TrcPktDecodeEtmV4I::processTransElem(TrcStackElem *pElem)
     {
         outElem().setTransactionType((trace_memtrans_t)((int)OCSD_MEM_TRANS_FAIL -
             ((int)P0_TRANS_FAIL - (int)pElem->getP0Type())));
+    }
+    return err;
+}
+
+ocsd_err_t TrcPktDecodeEtmV4I::processITEElem(TrcStackElem *pElem)
+{
+    ocsd_err_t err = OCSD_OK;
+    TrcStackElemITE *pITEElem = dynamic_cast<TrcStackElemITE *>(pElem);
+
+    err = m_out_elem.addElemType(pElem->getRootIndex(), OCSD_GEN_TRC_ELEM_INSTRUMENTATION);
+    if (!err) {
+        outElem().setITEInfo(pITEElem->getITE());
     }
     return err;
 }
@@ -1339,12 +1397,15 @@ ocsd_err_t TrcPktDecodeEtmV4I::processAtom(const ocsd_atm_val atom)
         {
             outElem().setType(OCSD_GEN_TRC_ELEM_ADDR_NACC);
             outElem().st_addr = m_instr_info.instr_addr;
+            outElem().exception_number = (uint32_t)getCurrMemSpace();
         }
     }
     return err;
 }
 
 // Exception processor
+#define M_CLASS_TAIL_ADDR 0xFFFFFFFE
+
 ocsd_err_t TrcPktDecodeEtmV4I::processException()
 {
     ocsd_err_t err;
@@ -1357,6 +1418,7 @@ ocsd_err_t TrcPktDecodeEtmV4I::processException()
     ocsd_trc_index_t excep_pkt_index;
     WP_res_t WPRes = WP_NOT_FOUND;
     bool ETE_resetPkt = false;
+    bool bMTailChain = false;
 
     // grab the exception element off the stack
     pExceptElem = dynamic_cast<TrcStackElemExcept *>(m_P0_stack.back());  // get the exception element
@@ -1428,8 +1490,12 @@ ocsd_err_t TrcPktDecodeEtmV4I::processException()
 
     if (!ETE_resetPkt)
     {
+        /* check for M class tail chain / deferred exceptions */        
+        if (m_config->coreProfile() == profile_CortexM)
+            bMTailChain = (excep_ret_addr == M_CLASS_TAIL_ADDR);
+
         // if the preferred return address is not the end of the last output range...
-        if (m_instr_info.instr_addr != excep_ret_addr)
+        if ((m_instr_info.instr_addr < excep_ret_addr) && !bMTailChain)
         {
             bool range_out = false;
             instr_range_t addr_range;
@@ -1485,6 +1551,7 @@ ocsd_err_t TrcPktDecodeEtmV4I::processException()
 
             outElem().setType(OCSD_GEN_TRC_ELEM_ADDR_NACC);
             outElem().st_addr = m_instr_info.instr_addr;
+            outElem().exception_number = (uint32_t)getCurrMemSpace();
 
             // used the element - need another for the final exception packet.
             if ((err = m_out_elem.addElem(excep_pkt_index)))
@@ -1497,7 +1564,13 @@ ocsd_err_t TrcPktDecodeEtmV4I::processException()
 
     // add end address as preferred return address to end addr in element
     outElem().en_addr = excep_ret_addr;
+    
     outElem().excep_ret_addr = 1;
+    if (bMTailChain) 
+    {
+        outElem().excep_ret_addr = 0;
+        outElem().excep_M_tail_chain = 1;
+    }
     outElem().excep_ret_addr_br_tgt = branch_target;
     outElem().exception_number = pExceptElem->getExcepNum();
 
@@ -1659,6 +1732,7 @@ ocsd_err_t TrcPktDecodeEtmV4I::processSourceAddress()
         // can't access - no bytes returned - output nacc.
         err = m_out_elem.addElemType(pElem->getRootIndex(), OCSD_GEN_TRC_ELEM_ADDR_NACC);
         outElem().setAddrStart(srcAddr.val);
+        outElem().exception_number = (uint32_t)getCurrMemSpace();
         return err;
     }
 
@@ -1759,6 +1833,7 @@ ocsd_err_t TrcPktDecodeEtmV4I::processSourceAddress()
                     if (err)
                         return err;
                     outElem().setAddrStart(srcAddr.val);
+                    outElem().exception_number = (uint32_t)getCurrMemSpace();
 
                     // force range to the one instruction
                     out_range.num_instr = 1;
@@ -1842,6 +1917,15 @@ ocsd_err_t TrcPktDecodeEtmV4I::traceInstrToWP(instr_range_t &range, WP_res_t &WP
             // not enough memory accessible.
             WPRes = WP_NACC;
         }
+
+        if (m_num_instr_range_limit)
+        {
+            if (range.num_instr > (uint32_t)m_num_instr_range_limit)
+            {
+                err = OCSD_ERR_I_RANGE_LIMIT_OVERRUN;
+                LogError(ocsdError(OCSD_ERR_SEV_ERROR, err, "Decode Instruction Range Limit Overrun"));
+            }
+        }
     }
     // update the range decoded address in the output packet.
     range.en_addr = m_instr_info.instr_addr;
@@ -1858,7 +1942,10 @@ void TrcPktDecodeEtmV4I::updateContext(TrcStackElemCtxt *pCtxtElem, OcsdTraceEle
     m_is_64bit = (ctxt.SF != 0);
     elem.context.bits64 = ctxt.SF;
     m_is_secure = (ctxt.NS == 0);
-    elem.context.security_level = ctxt.NS ? ocsd_sec_nonsecure : ocsd_sec_secure;
+    if (ctxt.NSE)
+        elem.context.security_level = ctxt.NS ? ocsd_sec_realm : ocsd_sec_root;
+    else
+        elem.context.security_level = ctxt.NS ? ocsd_sec_nonsecure : ocsd_sec_secure;
     elem.context.exception_level = (ocsd_ex_level)ctxt.EL;
     elem.context.el_valid = 1;
     if(ctxt.updated_c)
@@ -1912,7 +1999,6 @@ ocsd_err_t TrcPktDecodeEtmV4I::handlePacketErr(ocsd_err_t err, ocsd_err_severity
 
 }
 
-
 inline ocsd_mem_space_acc_t TrcPktDecodeEtmV4I::getCurrMemSpace()
 {
     static ocsd_mem_space_acc_t SMemSpace[] = {
@@ -1929,12 +2015,37 @@ inline ocsd_mem_space_acc_t TrcPktDecodeEtmV4I::getCurrMemSpace()
         OCSD_MEM_SPACE_EL3
     };
 
+    static ocsd_mem_space_acc_t RMemSpace[] = {
+        OCSD_MEM_SPACE_EL1R,
+        OCSD_MEM_SPACE_EL1R,
+        OCSD_MEM_SPACE_EL2R,
+        OCSD_MEM_SPACE_ROOT
+    };
+
     /* if no valid EL value - just use S/NS */
     if (!outElem().context.el_valid)
         return  m_is_secure ? OCSD_MEM_SPACE_S : OCSD_MEM_SPACE_N;
-    
+
     /* mem space according to EL + S/NS */
+    ocsd_mem_space_acc_t mem_space = OCSD_MEM_SPACE_NONE;
     int el = (int)(outElem().context.exception_level) & 0x3;
-    return m_is_secure ? SMemSpace[el] : NSMemSpace[el];
+    
+    switch (outElem().context.security_level)
+    {
+    case ocsd_sec_root:
+        mem_space = OCSD_MEM_SPACE_ROOT;
+        break;
+    case ocsd_sec_realm:
+        mem_space = RMemSpace[el];
+        break;
+    case ocsd_sec_nonsecure:
+        mem_space = NSMemSpace[el];
+        break;
+    case ocsd_sec_secure:
+        mem_space = SMemSpace[el];
+        break;
+    };
+    
+    return mem_space;
 }
 /* End of File trc_pkt_decode_etmv4i.cpp */

@@ -43,6 +43,8 @@
 #include "common/ocsd_gen_elem_stack.h"
 #include "opencsd/etmv4/trc_etmv4_stack_elem.h"
 
+#define OCSD_ENV_INSTR_RANGE_LIMIT "OPENCSD_INSTR_RANGE_LIMIT"
+
 class TrcStackElem;
 class TrcStackElemParam;
 class TrcStackElemCtxt;
@@ -100,6 +102,9 @@ protected:
     // process a transaction element
     ocsd_err_t processTransElem(TrcStackElem *pElem);
 
+    // process an Instrumentation element
+    ocsd_err_t processITEElem(TrcStackElem *pElem);
+
     // process a bad packet
     ocsd_err_t handleBadPacket(const char *reason, ocsd_trc_index_t index = OCSD_BAD_TRC_INDEX);
 
@@ -126,6 +131,12 @@ private:
         WP_FOUND,
         WP_NACC
     } WP_res_t;
+
+    /* Optional run limit for decoded instruction range. 
+     * Throw error if limit exceeded. Set by env var - use for debugging decode runs 
+     * which may be running away due to bad data
+     */
+    int m_num_instr_range_limit;
 
     typedef struct {
         ocsd_vaddr_t st_addr;

@@ -40,7 +40,7 @@ ifeq (,$(filter nodoc,$(DEB_BUILD_OPTIONS)))
 	make -f decoder/build/linux/makefile docs
 endif
 
-override_dh_installdocs:
+override_dh_installdocs-indep:
 	# kick compat 11+ to put docs where we told it
 	dh_installdocs -X.md5 -X.map
 	jdupes -rl debian/libopencsd-doc/usr/share/doc/
